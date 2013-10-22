@@ -1,5 +1,11 @@
-require "qreport_ar/version"
 
 module QreportAr
-  # Your code goes here...
+  class << self
+    attr_accessor :verbose, :connection, :schema
+    attr_accessor :report_query_dir
+  end
+  self.connection = "no_pooling"
+  self.report_query_dir = lambda { | | "#{Rails.root}/db/qreport" }
 end
+
+require "qreport_ar/version"

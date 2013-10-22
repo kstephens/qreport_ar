@@ -1,35 +1,42 @@
 require 'qreport_ar'
 require 'qreport/connection'
 require 'qreport/report_run'
+require 'qreport'
 require 'qreport/report_runner'
 
 module QreportAR
   # An ActiveRecord model for Qreport report_runs table.
   class ReportRun < ActiveRecord::Base
     establish_connection QreportAR.connection
-    self.table_name = 'qr_report_runs'
+    self.table_name = [ QreportAR.schema, 'qr_report_runs' ].compact * '.'
+
     serialize :arguments, JSON
     serialize :error, JSON
     serialize :additional_columns, JSON
     serialize :base_columns, JSON
 
     def data
-      @data ||= self.class.conn.run("SELECT * FROM #{report_table} WHERE qr_run_id = #{id} ORDER BY qr_run_row")
+      @data ||= _report_run.data
+    end
+
+    def _report_run
+      @_report_run ||= Qreport::ReportRun.new(attributes.symbolize_keys.merge(:conn => self.class.conn))
     end
 
     def reload
-      @data = nil
+      @data = @_report_run = nil
       super
     end
 
-    def self.generate params
-      name = params[:name]
-      raise ArgumentError, "expected report name" if name.blank?
-      raise ArgumentError, "invalid report name" unless name =~ /\A[-_a-z0-9]+\Z/i
+    def self.generate report_name, params
+      raise ArgumentError, "expected report_name" if report_name.blank?
+      raise ArgumentError, "invalid report_name" unless report_name =~ /\A[-_a-z0-9]+\Z/i
 
       arguments = { }
-      (params[:arguments] || { }).each { | k, v | arguments[k.to_sym] = v }
+      params.each { | k, v | arguments[k.to_sym] = v }
       arguments[:now] ||= Time.now
+      arguments[:now] = Time.parse(arguments[:now]) if arguments[:now].is_a?(String)
+      interval = arguments[:interval] ||= '24 hour'
 
       report_run = Qreport::ReportRun.new(params)
       report_run.arguments = arguments
